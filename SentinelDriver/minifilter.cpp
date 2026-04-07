@@ -10,26 +10,11 @@
  * Copyright (c) 2026 SentinelCore Project. All rights reserved.
  */
 
-#include "common.h"
-#include "minifilter.h"
+#include "sentinel_common_driver.h"
 #include "pe_parser.h"
 #include "sha256.h"
-#include "entropy.h"
 #include "comm_port.h"
 #include "telemetry_pool.h"
-#include "../SentinelCommon/feature_vector.h"
-#include "../SentinelCommon/ipc_protocol.h"
-#include "../SentinelCommon/sentinel_constants.h"
-#include <ntstrsafe.h>
-
-// ---------------------------------------------------------------------------
-// Forward Declarations
-// ---------------------------------------------------------------------------
-extern "C" {
-    FLT_PREOP_CALLBACK_STATUS FLTAPI PreCreateCallback(_Inout_ PFLT_CALLBACK_DATA Data, _In_ PCFLT_RELATED_OBJECTS FltObjects, _Outptr_result_maybenull_ PVOID* CompletionContext);
-    FLT_PREOP_CALLBACK_STATUS FLTAPI PreWriteCallback(_Inout_ PFLT_CALLBACK_DATA Data, _In_ PCFLT_RELATED_OBJECTS FltObjects, _Outptr_result_maybenull_ PVOID* CompletionContext);
-    NTSTATUS FLTAPI FilterUnloadCallback(_In_ FLT_FILTER_UNLOAD_FLAGS Flags);
-}
 
 // ---------------------------------------------------------------------------
 // Global Driver Data
@@ -43,13 +28,13 @@ static const FLT_OPERATION_REGISTRATION g_OperationCallbacks[] = {
     {
         IRP_MJ_CREATE,                          // Major function
         0,                                       // Flags
-        PreCreateCallback,                       // Pre-operation
+        (void*)PreCreateCallback,                       // Pre-operation
         NULL                                     // Post-operation
     },
     {
         IRP_MJ_WRITE,                            // Major function
         0,                                       // Flags
-        PreWriteCallback,                        // Pre-operation
+        (void*)PreWriteCallback,                        // Pre-operation
         NULL                                     // Post-operation
     },
     { IRP_MJ_OPERATION_END }
@@ -64,7 +49,7 @@ static const FLT_REGISTRATION g_FilterRegistration = {
     0,                                           // Flags
     NULL,                                        // Context registrations
     g_OperationCallbacks,                        // Operation callbacks
-    FilterUnloadCallback,                        // FilterUnload
+    (void*)FilterUnloadCallback,                        // FilterUnload
     NULL,                                        // InstanceSetup
     NULL,                                        // InstanceQueryTeardown
     NULL,                                        // InstanceTeardownStart

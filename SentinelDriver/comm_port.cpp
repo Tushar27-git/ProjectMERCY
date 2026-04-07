@@ -9,9 +9,8 @@
  * Copyright (c) 2026 SentinelCore Project. All rights reserved.
  */
 
+#include "sentinel_common_driver.h"
 #include "comm_port.h"
-#include "../SentinelCommon/ipc_protocol.h"
-#include "../SentinelCommon/sentinel_constants.h"
 
 // ---------------------------------------------------------------------------
 // Static sequence counter for IPC messages
@@ -73,9 +72,9 @@ NTSTATUS InitializeCommunicationPort(_In_ PFLT_FILTER Filter)
         &g_DriverData.ServerPort,
         &oa,
         NULL,                           // ServerPortCookie
-        ConnectNotifyCallback,
-        DisconnectNotifyCallback,
-        MessageNotifyCallback,
+        (void*)ConnectNotifyCallback,
+        (void*)DisconnectNotifyCallback,
+        (void*)MessageNotifyCallback,
         1);                             // Max 1 connection (enforced atomically in ConnectNotifyCallback)
 
     FltFreeSecurityDescriptor(sd);

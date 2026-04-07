@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "common.h"
+#include "sentinel_common_driver.h"
 
 #define SHA256_DIGEST_LENGTH    32
 

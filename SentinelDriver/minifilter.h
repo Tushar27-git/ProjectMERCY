@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "common.h"
+#include "sentinel_common_driver.h"
 
 // ---------------------------------------------------------------------------
 // Minifilter Registration Constants

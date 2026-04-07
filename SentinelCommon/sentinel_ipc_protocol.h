@@ -1,10 +1,6 @@
 /**
- * @file ipc_protocol.h
+ * @file sentinel_ipc_protocol.h
  * @brief SentinelCore — Shared IPC message protocol between kernel and userland.
- *
- * Defines the wire format for communication between:
- *   - Kernel driver <-> Userland agent (via FltSendMessage/FilterGetMessage)
- *   - Agent <-> ML Pipeline (via Named Pipe, future)
  *
  * Copyright (c) 2026 SentinelCore Project. All rights reserved.
  */
@@ -17,11 +13,12 @@
 #include <cstdint>
 #endif
 
+// ---------------------------------------------------------------------------
+// 1. Structural Alignment (Wire Format)
+// ---------------------------------------------------------------------------
 #pragma pack(1)
 
-// ---------------------------------------------------------------------------
 // IPC Message Types
-// ---------------------------------------------------------------------------
 enum class IpcMessageType : uint32_t {
     FILE_EVENT          = 0x0001,   // File I/O event from minifilter
     AMSI_SCAN           = 0x0002,   // Script scan from AMSI provider
@@ -38,9 +35,7 @@ enum class IpcMessageType : uint32_t {
     KILL_SWITCH_TOGGLE  = 0x0200,   // Enable/disable kill switch
 };
 
-// ---------------------------------------------------------------------------
-// IPC Message Header — prefixes every message on the wire
-// ---------------------------------------------------------------------------
+// IPC Message Header
 struct IpcMessageHeader {
     uint32_t        magic;              // Protocol magic: 0x534E544C ('SNTL')
     uint32_t        version;            // Protocol version (1)
@@ -51,14 +46,10 @@ struct IpcMessageHeader {
 };
 
 // Protocol constants
-constexpr uint32_t IPC_MAGIC    = 0x534E544C;   // 'SNTL'
-constexpr uint32_t IPC_VERSION  = 1;
+#define IPC_MAGIC    0x534E544CU
+#define IPC_VERSION  1U
 
-// ---------------------------------------------------------------------------
-// Minifilter Communication — kernel <-> userland
-// ---------------------------------------------------------------------------
-
-// Message sent from kernel driver to userland agent (via comm port)
+// Minifilter Communication
 struct KernelToUserMessage {
     IpcMessageHeader    header;
     // Payload follows (FeatureVector for FILE_EVENT, raw bytes for others)
@@ -71,10 +62,10 @@ struct UserToKernelReply {
     uint32_t    flags;          // Reserved for future use
 };
 
-// Maximum message sizes
-constexpr uint32_t MAX_IPC_PAYLOAD_SIZE     = 8192;
-constexpr uint32_t MAX_KERNEL_MESSAGE_SIZE  = sizeof(IpcMessageHeader) + MAX_IPC_PAYLOAD_SIZE;
-
 #pragma pack()
 
-struct __Clangd_Sentinel_EOF_Workaround_Ipc2 {};
+// Maximum message sizes
+#define MAX_IPC_PAYLOAD_SIZE     8192
+#define MAX_KERNEL_MESSAGE_SIZE  (sizeof(IpcMessageHeader) + MAX_IPC_PAYLOAD_SIZE)
+
+struct __Clangd_Sentinel_EOF_Workaround_Ipc {};

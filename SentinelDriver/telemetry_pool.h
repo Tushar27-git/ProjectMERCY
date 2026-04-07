@@ -10,16 +10,15 @@
 
 #pragma once
 
-#include "common.h"
-#include "../SentinelCommon/ipc_protocol.h"
+#include "sentinel_common_driver.h"
 
 #define MAX_TELEMETRY_ITEMS 512
 
 typedef struct _TELEMETRY_ITEM {
-    LIST_ENTRY      ListEntry;
-    ULONG           MessageType;
-    ULONG           PayloadSize;
-    UCHAR           Payload[MAX_IPC_PAYLOAD_SIZE];
+  LIST_ENTRY ListEntry;
+  ULONG MessageType;
+  ULONG PayloadSize;
+  UCHAR Payload[MAX_IPC_PAYLOAD_SIZE];
 } TELEMETRY_ITEM, *PTELEMETRY_ITEM;
 
 /**
@@ -34,15 +33,13 @@ VOID SentinelCleanupTelemetryPool();
 
 /**
  * @brief Queue a telemetry event for asynchronous delivery.
- * 
+ *
  * Pulls a pre-allocated item from the free list, copies the payload,
  * and pushes it to the busy list for the worker thread to send.
  * Safe to call from IRQL <= DISPATCH_LEVEL.
  */
-VOID SentinelQueueTelemetryItem(
-    _In_reads_bytes_(PayloadSize) PVOID Payload,
-    _In_ ULONG PayloadSize,
-    _In_ ULONG MessageType);
+VOID SentinelQueueTelemetryItem(_In_reads_bytes_(PayloadSize) PVOID Payload,
+                                _In_ ULONG PayloadSize, _In_ ULONG MessageType);
 
 /**
  * @brief Reset the BSOD crash counter (helper from callbacks.cpp).

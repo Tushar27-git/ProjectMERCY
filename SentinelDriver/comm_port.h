@@ -7,8 +7,7 @@
 
 #pragma once
 
-#include "common.h"
-#include "../SentinelCommon/feature_vector.h"
+#include "sentinel_common_driver.h"
 
 /**
  * @brief Initialize the FltCommunicationPort for userland agent connection.

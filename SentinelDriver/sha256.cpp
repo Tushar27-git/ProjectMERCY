@@ -9,8 +9,8 @@
  * Copyright (c) 2026 SentinelCore Project. All rights reserved.
  */
 
+#include "sentinel_common_driver.h"
 #include "sha256.h"
-#include <bcrypt.h>
 
 #pragma comment(lib, "cng.lib")
 

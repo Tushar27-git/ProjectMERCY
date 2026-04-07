@@ -17,7 +17,7 @@
 #include <cstdint>
 #endif
 
-#pragma pack(1)
+#pragma pack(push, 1)
 
 // ---------------------------------------------------------------------------
 // IPC Message Types
@@ -75,6 +75,4 @@ struct UserToKernelReply {
 constexpr uint32_t MAX_IPC_PAYLOAD_SIZE     = 8192;
 constexpr uint32_t MAX_KERNEL_MESSAGE_SIZE  = sizeof(IpcMessageHeader) + MAX_IPC_PAYLOAD_SIZE;
 
-#pragma pack()
-
-struct __Clangd_Sentinel_EOF_Workaround_Ipc2 {};
+#pragma pack(pop)

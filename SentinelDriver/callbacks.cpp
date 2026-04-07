@@ -11,12 +11,12 @@
  * Copyright (c) 2026 SentinelCore Project. All rights reserved.
  */
 
+#include "sentinel_common_driver.h"
 #include "callbacks.h"
 #include "telemetry_pool.h"
 #include "../SentinelCommon/feature_vector.h"
-#include "../SentinelCommon/ipc_protocol.h"
+#include "../SentinelCommon/sentinel_ipc_protocol.h"
 #include "../SentinelCommon/sentinel_constants.h"
-#include <ntstrsafe.h>
 
 // ---------------------------------------------------------------------------
 // Global state for callback handles

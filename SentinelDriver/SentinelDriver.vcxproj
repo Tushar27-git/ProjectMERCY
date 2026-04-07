@@ -71,7 +71,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ClInclude Include="common.h" />
+    <ClInclude Include="sentinel_common_driver.h" />
+    <ClInclude Include="sentinel_ipc_protocol.h" />
+    <ClInclude Include="sentinel_constants.h" />
+    <ClInclude Include="feature_vector.h" />
     <ClInclude Include="minifilter.h" />
     <ClInclude Include="pe_parser.h" />
     <ClInclude Include="sha256.h" />

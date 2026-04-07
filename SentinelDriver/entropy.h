@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "common.h"
+#include "sentinel_common_driver.h"
 
 /**
  * @brief Calculate Shannon entropy of a data buffer.

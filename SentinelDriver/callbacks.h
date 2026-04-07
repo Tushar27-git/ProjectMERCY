@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "common.h"
+#include "sentinel_common_driver.h"
 
 // Initialize native Windows kernel callbacks (Process, Thread, Image, Handle).
 // If the BSOD crash counter exceeds the threshold, enters passive mode instead.

@@ -7,8 +7,7 @@
 
 #pragma once
 
-#include "common.h"
-#include "../SentinelCommon/feature_vector.h"
+#include "sentinel_common_driver.h"
 
 /**
  * @brief Quick check if a buffer starts with a valid MZ/PE signature.
