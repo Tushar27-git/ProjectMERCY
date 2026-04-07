@@ -23,6 +23,15 @@
 #include <ntstrsafe.h>
 
 // ---------------------------------------------------------------------------
+// Forward Declarations
+// ---------------------------------------------------------------------------
+extern "C" {
+    FLT_PREOP_CALLBACK_STATUS FLTAPI PreCreateCallback(_Inout_ PFLT_CALLBACK_DATA Data, _In_ PCFLT_RELATED_OBJECTS FltObjects, _Outptr_result_maybenull_ PVOID* CompletionContext);
+    FLT_PREOP_CALLBACK_STATUS FLTAPI PreWriteCallback(_Inout_ PFLT_CALLBACK_DATA Data, _In_ PCFLT_RELATED_OBJECTS FltObjects, _Outptr_result_maybenull_ PVOID* CompletionContext);
+    NTSTATUS FLTAPI FilterUnloadCallback(_In_ FLT_FILTER_UNLOAD_FLAGS Flags);
+}
+
+// ---------------------------------------------------------------------------
 // Global Driver Data
 // ---------------------------------------------------------------------------
 SENTINEL_DRIVER_DATA g_DriverData = { 0 };
