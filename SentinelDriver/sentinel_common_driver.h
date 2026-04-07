@@ -168,8 +168,52 @@ typedef struct _KEY_VALUE_PARTIAL_INFORMATION {
 typedef void* PFLT_FILTER;
 typedef void* PFLT_PORT;
 typedef void* PEPROCESS;
+typedef void* PETHREAD;
 typedef void* BCRYPT_ALG_HANDLE;
 typedef void* BCRYPT_HASH_HANDLE;
+typedef void* POBJECT_TYPE;
+
+extern POBJECT_TYPE* PsProcessType;
+extern POBJECT_TYPE* PsThreadType;
+
+typedef struct _OB_PRE_CREATE_HANDLE_INFORMATION {
+    ACCESS_MASK DesiredAccess;
+    ACCESS_MASK OriginalDesiredAccess;
+} OB_PRE_CREATE_HANDLE_INFORMATION, *POB_PRE_CREATE_HANDLE_INFORMATION;
+
+typedef union _OB_PRE_OPERATION_PARAMETERS {
+    OB_PRE_CREATE_HANDLE_INFORMATION CreateHandleInformation;
+} OB_PRE_OPERATION_PARAMETERS, *POB_PRE_OPERATION_PARAMETERS;
+
+typedef struct _OB_PRE_OPERATION_INFORMATION {
+    ULONG Operation;
+    union {
+        ULONG Flags;
+        struct {
+            ULONG KernelHandle : 1;
+            ULONG Reserved : 31;
+        };
+    };
+    PVOID Object;
+    POBJECT_TYPE ObjectType;
+    PVOID CallContext;
+    POB_PRE_OPERATION_PARAMETERS Parameters;
+} OB_PRE_OPERATION_INFORMATION, *POB_PRE_OPERATION_INFORMATION;
+
+typedef struct _OB_OPERATION_REGISTRATION {
+    POBJECT_TYPE* ObjectType;
+    ULONG Operations;
+    PVOID PreOperation;
+    PVOID PostOperation;
+} OB_OPERATION_REGISTRATION, *POB_OPERATION_REGISTRATION;
+
+typedef struct _OB_CALLBACK_REGISTRATION {
+    USHORT Version;
+    USHORT OperationRegistrationCount;
+    UNICODE_STRING Altitude;
+    PVOID RegistrationContext;
+    POB_OPERATION_REGISTRATION OperationRegistration;
+} OB_CALLBACK_REGISTRATION, *POB_CALLBACK_REGISTRATION;
 
 typedef struct _FLT_OPERATION_REGISTRATION { 
     int MajorFunction; 
@@ -205,6 +249,7 @@ typedef struct _IMAGE_SECTION_HEADER { unsigned char Name[8]; union { unsigned l
 
 // Enums / Status
 typedef enum _FLT_PREOP_CALLBACK_STATUS { FLT_PREOP_SUCCESS_NO_CALLBACK, FLT_PREOP_SUCCESS_WITH_CALLBACK, FLT_PREOP_PENDING, FLT_PREOP_SYNCHRONOUS_PAGING_IO } FLT_PREOP_CALLBACK_STATUS;
+typedef enum _OB_PREOP_CALLBACK_STATUS { OB_PREOP_SUCCESS } OB_PREOP_CALLBACK_STATUS;
 typedef enum _EVENT_TYPE { NotificationEvent, SynchronizationEvent } EVENT_TYPE;
 typedef enum _KEY_VALUE_INFORMATION_CLASS { KeyValuePartialInformation } KEY_VALUE_INFORMATION_CLASS;
 
@@ -259,6 +304,9 @@ typedef enum _KEY_VALUE_INFORMATION_CLASS { KeyValuePartialInformation } KEY_VAL
 #define IRP_MJ_WRITE                    0x04
 #define IRP_MJ_OPERATION_END            0xFF
 #define FLT_REGISTRATION_VERSION        0x0203
+#define OB_OPERATION_HANDLE_CREATE      0x00000001
+#define OB_OPERATION_HANDLE_DUPLICATE   0x00000002
+#define OB_FLT_REGISTRATION_VERSION     0x0100
 #define DPFLTR_IHVDRIVER_ID             1
 #define DPFLTR_INFO_LEVEL               3
 #define IO_NO_INCREMENT                 0
@@ -351,6 +399,16 @@ NTSTATUS ZwSetValueKey(HANDLE, PUNICODE_STRING, ULONG, ULONG, PVOID, ULONG);
 PVOID MmGetSystemAddressForMdlSafe(PVOID, ULONG);
 HANDLE PsGetCurrentProcessId();
 HANDLE PsGetCurrentThreadId();
+HANDLE PsGetProcessId(PEPROCESS Process);
+HANDLE PsGetThreadProcessId(PETHREAD Thread);
+HANDLE PsGetThreadId(PETHREAD Thread);
+NTSTATUS PsSetCreateProcessNotifyRoutineEx(PVOID NotifyRoutine, BOOLEAN Remove);
+NTSTATUS PsSetCreateThreadNotifyRoutine(PVOID NotifyRoutine);
+NTSTATUS PsRemoveCreateThreadNotifyRoutine(PVOID NotifyRoutine);
+NTSTATUS PsSetLoadImageNotifyRoutine(PVOID NotifyRoutine);
+NTSTATUS PsRemoveLoadImageNotifyRoutine(PVOID NotifyRoutine);
+NTSTATUS ObRegisterCallbacks(POB_CALLBACK_REGISTRATION CallbackRegistration, PVOID* RegistrationHandle);
+VOID ObUnRegisterCallbacks(PVOID RegistrationHandle);
 #ifdef __cplusplus
 }
 #endif

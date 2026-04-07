@@ -5,6 +5,8 @@
  * Implements PsSetCreateProcessNotifyRoutineEx, PsSetCreateThreadNotifyRoutine,
  * PsSetLoadImageNotifyRoutine, and ObRegisterCallbacks.
  *
+ * (Triggering IDE re-parse)
+ *
  * SAFETY: Every callback is wrapped in __try/__except to prevent BSODs.
  * SAFETY: Every callback uses SentinelQueueTelemetryItem for async delivery.
  *
@@ -14,9 +16,6 @@
 #include "sentinel_common_driver.h"
 #include "callbacks.h"
 #include "telemetry_pool.h"
-#include "../SentinelCommon/feature_vector.h"
-#include "../SentinelCommon/sentinel_ipc_protocol.h"
-#include "../SentinelCommon/sentinel_constants.h"
 
 // ---------------------------------------------------------------------------
 // Global state for callback handles
@@ -281,7 +280,7 @@ NTSTATUS RegisterKernelCallbacks() {
     }
 
     // 1. Process Callback (requires /INTEGRITYCHECK)
-    status = PsSetCreateProcessNotifyRoutineEx(ProcessNotifyCallback, FALSE);
+    status = PsSetCreateProcessNotifyRoutineEx((PVOID)ProcessNotifyCallback, FALSE);
     if (NT_SUCCESS(status)) {
         g_ProcessCallbackRegistered = TRUE;
         SentinelDbgPrint("Registered: PsSetCreateProcessNotifyRoutineEx");
@@ -291,7 +290,7 @@ NTSTATUS RegisterKernelCallbacks() {
     }
 
     // 2. Thread Callback
-    status = PsSetCreateThreadNotifyRoutine(ThreadNotifyCallback);
+    status = PsSetCreateThreadNotifyRoutine((PVOID)ThreadNotifyCallback);
     if (NT_SUCCESS(status)) {
         g_ThreadCallbackRegistered = TRUE;
         SentinelDbgPrint("Registered: PsSetCreateThreadNotifyRoutine");
@@ -300,7 +299,7 @@ NTSTATUS RegisterKernelCallbacks() {
     }
 
     // 3. Image Load Callback
-    status = PsSetLoadImageNotifyRoutine(ImageLoadNotifyCallback);
+    status = PsSetLoadImageNotifyRoutine((PVOID)ImageLoadNotifyCallback);
     if (NT_SUCCESS(status)) {
         g_ImageCallbackRegistered = TRUE;
         SentinelDbgPrint("Registered: PsSetLoadImageNotifyRoutine");
@@ -315,7 +314,7 @@ NTSTATUS RegisterKernelCallbacks() {
     opReg[0].ObjectType = PsProcessType;
     opReg[1].ObjectType = PsThreadType;
     opReg[0].Operations = opReg[1].Operations = OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE;
-    opReg[0].PreOperation = opReg[1].PreOperation = ObPreOperationCallback;
+    opReg[0].PreOperation = opReg[1].PreOperation = (PVOID)ObPreOperationCallback;
 
     RtlInitUnicodeString(&obReg.Altitude, SENTINEL_ALTITUDE);
     obReg.Version = OB_FLT_REGISTRATION_VERSION;
@@ -343,19 +342,19 @@ VOID UnregisterKernelCallbacks() {
     }
 
     if (g_ProcessCallbackRegistered) {
-        PsSetCreateProcessNotifyRoutineEx(ProcessNotifyCallback, TRUE);
+        PsSetCreateProcessNotifyRoutineEx((PVOID)ProcessNotifyCallback, TRUE);
         g_ProcessCallbackRegistered = FALSE;
         SentinelDbgPrint("Unregistered: ProcessNotifyCallback");
     }
 
     if (g_ThreadCallbackRegistered) {
-        PsRemoveCreateThreadNotifyRoutine(ThreadNotifyCallback);
+        PsRemoveCreateThreadNotifyRoutine((PVOID)ThreadNotifyCallback);
         g_ThreadCallbackRegistered = FALSE;
         SentinelDbgPrint("Unregistered: ThreadNotifyCallback");
     }
 
     if (g_ImageCallbackRegistered) {
-        PsRemoveLoadImageNotifyRoutine(ImageLoadNotifyCallback);
+        PsRemoveLoadImageNotifyRoutine((PVOID)ImageLoadNotifyCallback);
         g_ImageCallbackRegistered = FALSE;
         SentinelDbgPrint("Unregistered: ImageLoadNotifyCallback");
     }
