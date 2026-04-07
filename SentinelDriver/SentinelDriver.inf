@@ -1,0 +1,96 @@
+;
+; SentinelDriver.inf — WDK Minifilter INF for SentinelCore Kernel Driver
+;
+; Altitude 320000 — FSFilter Anti-Virus group
+;
+; Copyright (c) 2026 SentinelCore Project. All rights reserved.
+;
+
+[Version]
+Signature   = "$Windows NT$"
+Class       = "ActivityMonitor"
+ClassGuid   = {b86dff51-a31e-4bac-b3cf-e8cfe75c9fc2}
+Provider    = %Provider%
+DriverVer   = 04/07/2026,1.0.0.0
+CatalogFile = SentinelDriver.cat
+
+[DestinationDirs]
+DefaultDestDir          = 12    ; %windir%\system32\drivers
+SentinelDriver.DriverFiles = 12
+
+;; ==================================================================
+;; Default Install
+;; ==================================================================
+
+[DefaultInstall.NTamd64]
+OptionDesc  = %ServiceDescription%
+CopyFiles   = SentinelDriver.DriverFiles
+
+[DefaultInstall.NTamd64.Services]
+AddService  = %ServiceName%,,SentinelDriver.Service
+
+;; ==================================================================
+;; Default Uninstall
+;; ==================================================================
+
+[DefaultUninstall.NTamd64]
+LegacyUninstall = 1
+DelFiles        = SentinelDriver.DriverFiles
+
+[DefaultUninstall.NTamd64.Services]
+DelService = %ServiceName%,0x200  ; SPSVCINST_STOPSERVICE
+
+;; ==================================================================
+;; Service Configuration
+;; ==================================================================
+
+[SentinelDriver.Service]
+DisplayName    = %ServiceName%
+Description    = %ServiceDescription%
+ServiceBinary  = %12%\SentinelDriver.sys
+Dependencies   = FltMgr
+ServiceType    = 2               ; SERVICE_FILE_SYSTEM_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+LoadOrderGroup = "FSFilter Activity Monitor"
+AddReg         = SentinelDriver.AddRegistry
+
+;; ==================================================================
+;; Registry — Minifilter Instances
+;; ==================================================================
+
+[SentinelDriver.AddRegistry]
+HKR,"Instances","DefaultInstance",0x00000000,%DefaultInstance%
+HKR,"Instances\"%Instance1.Name%,"Altitude",0x00000000,%Instance1.Altitude%
+HKR,"Instances\"%Instance1.Name%,"Flags",0x00010001,%Instance1.Flags%
+
+;; ==================================================================
+;; File Copy
+;; ==================================================================
+
+[SentinelDriver.DriverFiles]
+SentinelDriver.sys
+
+;; ==================================================================
+;; Source Disk Configuration
+;; ==================================================================
+
+[SourceDisksNames]
+1 = %DiskName%
+
+[SourceDisksFiles]
+SentinelDriver.sys = 1
+
+;; ==================================================================
+;; Strings
+;; ==================================================================
+
+[Strings]
+Provider            = "SentinelCore"
+ServiceName         = "SentinelDriver"
+ServiceDescription  = "SentinelCore EDR Kernel Minifilter Driver"
+DefaultInstance     = "SentinelDriver Instance"
+Instance1.Name      = "SentinelDriver Instance"
+Instance1.Altitude  = "320000"
+Instance1.Flags     = 0x0           ; Automatic attachment
+DiskName            = "SentinelCore Driver Installation Disk"

