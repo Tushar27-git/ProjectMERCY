@@ -67,7 +67,6 @@ public:
 
     uint64_t MessagesReceived() const { return m_messagesReceived.load(); }
 
-private:
     /**
      * @brief The receive loop thread function.
      */
@@ -76,6 +75,7 @@ private:
         SPSCRingBuffer<TelemetryRecord, 4096>* ringBuf,
         MLPipelineInterface* pipeline);
 
+private:
     HANDLE                  m_hPort;
     std::atomic<bool>       m_connected;
     std::atomic<bool>       m_receiving;

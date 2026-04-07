@@ -164,8 +164,7 @@ IFACEMETHODIMP SentinelAmsiProvider::Scan(
     if (readSize > 0) {
         contentBuffer = (PUCHAR)malloc(readSize);
         if (contentBuffer) {
-            hrAttr = stream->GetAttribute(AMSI_ATTRIBUTE_CONTENT,
-                readSize, contentBuffer, &actualSize);
+            hrAttr = stream->Read(0, readSize, contentBuffer, &actualSize);
 
             if (SUCCEEDED(hrAttr) && actualSize > 0) {
                 // Compute a simple hash for telemetry
