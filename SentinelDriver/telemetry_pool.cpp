@@ -53,7 +53,7 @@ static VOID SentinelTelemetryWorkerRoutine(_In_ PVOID Context)
             entry = RemoveHeadList(&g_TelemetryPool.BusyList);
             KeReleaseSpinLock(&g_TelemetryPool.Lock, oldIrql);
 
-            item = CONTAINING_RECORD(entry, TELEMETRY_ITEM, ListEntry);
+            item = CONTAINING_RECORD(entry, _TELEMETRY_ITEM, ListEntry);
 
             // Send to userland (this may block/timeout - and that's okay here)
             SendTelemetryToAgent(item->Payload, item->PayloadSize, item->MessageType);
@@ -192,7 +192,7 @@ VOID SentinelQueueTelemetryItem(
 
     // Pull from free list
     PLIST_ENTRY entry = RemoveHeadList(&g_TelemetryPool.FreeList);
-    PTELEMETRY_ITEM item = CONTAINING_RECORD(entry, TELEMETRY_ITEM, ListEntry);
+    PTELEMETRY_ITEM item = CONTAINING_RECORD(entry, _TELEMETRY_ITEM, ListEntry);
 
     // Fill data
     item->MessageType = MessageType;
