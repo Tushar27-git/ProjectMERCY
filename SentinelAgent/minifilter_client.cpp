@@ -195,7 +195,7 @@ void MinifilterClient::ReceiveThreadFunc(
     LOG_INFO("MinifilterClient: Receive thread started (TID=%lu)", GetCurrentThreadId());
 
     SENTINEL_MESSAGE message = {};
-    DWORD bytesReturned = 0;
+
 
     while (m_receiving && m_connected) {
         // Wait for a message from the kernel driver

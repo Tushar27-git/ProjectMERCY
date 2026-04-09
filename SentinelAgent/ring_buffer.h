@@ -23,6 +23,8 @@
 #include <type_traits>
 #include <new>
 
+#pragma warning(disable : 4324) // structure was padded due to alignment specifier
+
 namespace sentinel {
 
 // Cache line size (64 bytes on x86-64)

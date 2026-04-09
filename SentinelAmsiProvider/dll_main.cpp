@@ -84,7 +84,7 @@ static HRESULT SetRegValue(HKEY hKey, LPCWSTR valueName, LPCWSTR value) {
 // DllRegisterServer — Register COM class + AMSI provider in registry
 // ---------------------------------------------------------------------------
 STDAPI DllRegisterServer() {
-    HRESULT hr = S_OK;
+
     HKEY hKey = NULL;
     WCHAR dllPath[MAX_PATH] = {};
 

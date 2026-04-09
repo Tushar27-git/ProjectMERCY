@@ -46,6 +46,9 @@
   </ItemDefinitionGroup>
 
   <ItemGroup>
+    <ClCompile Include="dummy.cpp" />
+  </ItemGroup>
+  <ItemGroup>
     <ClInclude Include="feature_vector.h" />
     <ClInclude Include="ipc_protocol.h" />
     <ClInclude Include="sentinel_constants.h" />
